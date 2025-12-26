@@ -1,0 +1,366 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loboprint Cloud | Edición Decoración y Formatos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'loboprint-decor-pro';
+        
+        let auth, db;
+        if (firebaseConfig.apiKey) {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        }
+
+        window.state = { 
+            user: null, 
+            connectedDevice: null, 
+            colorMode: 'color', 
+            formatCategory: 'cuadros', 
+            selectedSize: '60x90',
+            orientation: 'portrait'
+        };
+
+        const init = async () => {
+            const currentAuth = auth || getAuth();
+            onAuthStateChanged(currentAuth, (user) => {
+                window.state.user = user;
+                if (user) {
+                    document.getElementById('cloud-status').innerText = 'Cloud Activo';
+                    loadHistory(user.uid);
+                }
+            });
+            await signInAnonymously(currentAuth);
+        };
+
+        const loadHistory = (uid) => {
+            if (!db) return;
+            onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'history'), (snap) => {
+                const list = [];
+                snap.forEach(d => list.push(d.data()));
+                renderHistory(list.sort((a,b) => b.timestamp?.seconds - a.timestamp?.seconds));
+            });
+        };
+
+        window.logPrintJob = async (job) => {
+            if (!db || !window.state.user) return;
+            await addDoc(collection(db, 'artifacts', appId, 'users', window.state.user.uid, 'history'), {
+                ...job,
+                timestamp: serverTimestamp()
+            });
+        };
+
+        window.onload = init;
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020202; }
+        .glass { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); }
+        .paper-preview { transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1); position: relative; box-shadow: 0 40px 80px -15px rgba(0,0,0,0.8); }
+        
+        /* Proporciones Dinámicas para Visualización */
+        .ratio-ticket { width: 140px; height: 320px; }
+        .ratio-foto { width: 260px; height: 180px; }
+        .ratio-a4 { width: 220px; height: 310px; }
+        .ratio-cuadro { width: 280px; height: 420px; }
+        .ratio-pano { width: 450px; height: 180px; }
+
+        .active-ring { ring: 2px; ring-color: #f97316; ring-offset: 2px; ring-offset-color: black; }
+        .gradient-text { background: linear-gradient(to right, #f97316, #fb923c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+</head>
+<body class="text-zinc-300 min-h-screen">
+
+    <!-- Navbar Minimalista -->
+    <nav class="sticky top-0 z-50 glass border-b border-white/5 px-8 h-20 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 bg-orange-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-orange-600/40 rotate-3">
+                <i class="fas fa-layer-group text-white text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-black tracking-tighter uppercase italic">Loboprint <span class="text-orange-500">Decor</span></h1>
+                <p id="cloud-status" class="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Sincronizando Nube...</p>
+            </div>
+        </div>
+        <div id="device-pill" class="hidden md:flex items-center gap-3 bg-zinc-900/80 px-5 py-2.5 rounded-2xl border border-zinc-800">
+            <div class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+            <span id="active-printer" class="text-[9px] font-black uppercase text-zinc-400">Sin Impresora</span>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
+        
+        <!-- Panel de Configuración -->
+        <div class="lg:col-span-4 space-y-6">
+            
+            <section class="glass p-6 rounded-[2.5rem]">
+                <h3 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-6">1. Motor de Color</h3>
+                <div class="grid grid-cols-2 gap-2 p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                    <button onclick="setColor('color')" id="btn-color" class="py-3 text-[10px] font-black rounded-xl bg-orange-600 text-white shadow-lg shadow-orange-600/20 transition-all">COLOR PROFESIONAL</button>
+                    <button onclick="setColor('bw')" id="btn-bw" class="py-3 text-[10px] font-black rounded-xl text-zinc-500 hover:text-white transition-all">FINE ART B&N</button>
+                </div>
+            </section>
+
+            <section class="glass p-6 rounded-[2.5rem]">
+                <h3 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-6">2. Formato de Destino</h3>
+                
+                <div class="space-y-4">
+                    <!-- Categorías -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setCategory('papel')" id="cat-papel" class="p-4 rounded-2xl bg-white/5 border border-white/5 text-left transition-all">
+                            <i class="fas fa-file-invoice mb-3 text-zinc-500"></i>
+                            <p class="text-[10px] font-black uppercase">Papel Estándar</p>
+                            <p class="text-[8px] text-zinc-600">Tickets, A4, Carta</p>
+                        </button>
+                        <button onclick="setCategory('cuadros')" id="cat-cuadros" class="p-4 rounded-2xl bg-orange-600/10 border border-orange-600/20 text-left transition-all ring-1 ring-orange-600">
+                            <i class="fas fa-gem mb-3 text-orange-500"></i>
+                            <p class="text-[10px] font-black uppercase text-orange-500">Cuadros y Decor</p>
+                            <p class="text-[8px] text-orange-300">Poster, Lienzo, Pared</p>
+                        </button>
+                    </div>
+
+                    <!-- Selector de Tamaño Específico -->
+                    <div class="space-y-3 pt-4">
+                        <label class="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Tamaño Seleccionado</label>
+                        <select id="size-selector" onchange="setSize(this.value)" class="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-orange-600 outline-none appearance-none">
+                            <!-- Se llena dinámicamente -->
+                        </select>
+                    </div>
+
+                    <!-- Orientación -->
+                    <div class="flex gap-2">
+                        <button onclick="setOrientation('portrait')" id="o-portrait" class="flex-1 py-3 bg-zinc-900 rounded-xl text-[9px] font-black border border-white/5">VERTICAL</button>
+                        <button onclick="setOrientation('landscape')" id="o-landscape" class="flex-1 py-3 bg-zinc-900 rounded-xl text-[9px] font-black border border-white/5">HORIZONTAL</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass p-6 rounded-[2.5rem]">
+                <h3 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">3. Hardware</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="connect('Zebra')" class="p-3 bg-zinc-900 rounded-xl text-[9px] font-black border border-white/5 hover:border-orange-500 transition-colors">ZEBRA</button>
+                    <button onclick="connect('Epson')" class="p-3 bg-zinc-900 rounded-xl text-[9px] font-black border border-white/5 hover:border-orange-500 transition-colors">EPSON</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Canvas Principal -->
+        <div class="lg:col-span-8 space-y-8">
+            <div class="glass rounded-[3.5rem] min-h-[650px] flex flex-col items-center justify-center p-12 relative overflow-hidden">
+                
+                <input type="file" id="media-input" class="hidden" accept="image/*">
+                
+                <!-- Estado Inicial -->
+                <div id="drop-area" onclick="document.getElementById('media-input').click()" class="text-center cursor-pointer group">
+                    <div class="w-24 h-24 bg-zinc-950 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 border border-white/5 shadow-2xl group-hover:bg-zinc-900 group-hover:scale-105 transition-all">
+                        <i class="fas fa-images text-zinc-700 group-hover:text-orange-500 text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-black italic gradient-text tracking-tighter">RENDERIZADOR DE MEDIOS</h2>
+                    <p class="text-xs text-zinc-500 mt-2 uppercase tracking-widest font-bold">Selecciona una imagen para el lienzo</p>
+                </div>
+
+                <!-- Previsualización Dinámica -->
+                <div id="print-view" class="hidden w-full flex flex-col items-center">
+                    <div class="relative mb-14 perspective-1000">
+                        <div id="paper-canvas" class="paper-preview ratio-cuadro bg-white p-4 border-[12px] border-white overflow-hidden">
+                            <img id="img-output" src="" class="w-full h-full object-cover transition-all duration-1000">
+                        </div>
+                        <!-- Sombra de pared simulada -->
+                        <div class="absolute -bottom-10 w-[120%] h-10 bg-black/40 blur-3xl -z-10"></div>
+                    </div>
+                    
+                    <div class="w-full max-w-sm space-y-4">
+                        <button onclick="processPrint()" class="w-full py-6 bg-white text-black rounded-[2rem] font-black text-[11px] tracking-[0.3em] shadow-2xl hover:bg-orange-600 hover:text-white transition-all transform active:scale-95 flex items-center justify-center gap-4">
+                            <i class="fas fa-print"></i> EJECUTAR IMPRESIÓN
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cargador -->
+                <div id="loader" class="hidden absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-50">
+                    <div class="w-16 h-16 border-4 border-zinc-800 border-t-orange-600 rounded-full animate-spin mb-8"></div>
+                    <p id="loader-msg" class="text-orange-500 font-black text-[10px] tracking-[0.5em] uppercase italic">Procesando...</p>
+                </div>
+            </div>
+
+            <!-- Feed Histórico -->
+            <section class="bg-zinc-950/50 rounded-[2.5rem] p-10 border border-white/5">
+                <div class="flex items-center justify-between mb-8">
+                    <h3 class="text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em]">Cola de Impresión Cloud</h3>
+                    <i class="fas fa-cloud text-zinc-800"></i>
+                </div>
+                <div id="history-grid" class="grid gap-4">
+                    <p class="text-center py-6 text-[9px] font-bold text-zinc-700 uppercase tracking-widest">Sincronizando base de datos...</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="toast" class="fixed bottom-10 right-10 bg-white text-black px-8 py-4 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-2xl opacity-0 translate-y-10 transition-all duration-500 z-[100] pointer-events-none"></div>
+
+    <script>
+        const sizes = {
+            papel: [
+                { id: '80mm', name: 'Ticket Térmico 80mm', ratio: 'ratio-ticket' },
+                { id: 'a4', name: 'Documento A4 (21x29cm)', ratio: 'ratio-a4' },
+                { id: 'carta', name: 'Carta (8.5x11")', ratio: 'ratio-a4' },
+                { id: '10x15', name: 'Foto Pequeña (10x15cm)', ratio: 'ratio-foto' }
+            ],
+            cuadros: [
+                { id: '40x50', name: 'Cuadro Galería (40x50cm)', ratio: 'ratio-cuadro' },
+                { id: '60x90', name: 'Poster Grande (60x90cm)', ratio: 'ratio-cuadro' },
+                { id: 'canvas', name: 'Lienzo Cuadrado (50x50cm)', ratio: 'ratio-cuadro' },
+                { id: 'pano', name: 'Cuadro Panorámico (120x40cm)', ratio: 'ratio-pano' }
+            ]
+        };
+
+        const ui = {
+            input: document.getElementById('media-input'),
+            drop: document.getElementById('drop-area'),
+            view: document.getElementById('print-view'),
+            img: document.getElementById('img-output'),
+            canvas: document.getElementById('paper-canvas'),
+            sizeSel: document.getElementById('size-selector'),
+            loader: document.getElementById('loader'),
+            loaderMsg: document.getElementById('loader-msg'),
+            printer: document.getElementById('active-printer'),
+            history: document.getElementById('history-grid'),
+            toast: document.getElementById('toast')
+        };
+
+        // Inicializar selectores
+        function updateSizeOptions() {
+            const options = sizes[window.state.formatCategory];
+            ui.sizeSel.innerHTML = options.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            setSize(options[0].id);
+        }
+
+        // Manejo de Archivos
+        ui.input.onchange = (e) => {
+            const f = e.target.files[0];
+            if(f) {
+                const r = new FileReader();
+                r.onload = ev => {
+                    ui.img.src = ev.target.result;
+                    ui.drop.classList.add('hidden');
+                    ui.view.classList.remove('hidden');
+                };
+                r.readAsDataURL(f);
+            }
+        };
+
+        // Lógica de Configuración
+        function setCategory(cat) {
+            window.state.formatCategory = cat;
+            document.getElementById('cat-papel').className = `p-4 rounded-2xl border transition-all ${cat === 'papel' ? 'bg-orange-600/10 border-orange-600/20 ring-1 ring-orange-600' : 'bg-white/5 border-white/5'}`;
+            document.getElementById('cat-cuadros').className = `p-4 rounded-2xl border transition-all ${cat === 'cuadros' ? 'bg-orange-600/10 border-orange-600/20 ring-1 ring-orange-600' : 'bg-white/5 border-white/5'}`;
+            updateSizeOptions();
+        }
+
+        function setSize(id) {
+            window.state.selectedSize = id;
+            const sizeObj = sizes[window.state.formatCategory].find(s => s.id === id);
+            ui.canvas.className = `paper-preview bg-white p-4 border-[12px] border-white overflow-hidden ${sizeObj.ratio}`;
+            if(window.state.orientation === 'landscape') {
+                ui.canvas.style.transform = 'rotate(90deg) scale(0.7)';
+            } else {
+                ui.canvas.style.transform = 'none';
+            }
+        }
+
+        function setOrientation(o) {
+            window.state.orientation = o;
+            document.getElementById('o-portrait').className = `flex-1 py-3 rounded-xl text-[9px] font-black border transition-all ${o === 'portrait' ? 'bg-orange-600 text-white border-orange-600' : 'bg-zinc-900 text-zinc-500 border-white/5'}`;
+            document.getElementById('o-landscape').className = `flex-1 py-3 rounded-xl text-[9px] font-black border transition-all ${o === 'landscape' ? 'bg-orange-600 text-white border-orange-600' : 'bg-zinc-900 text-zinc-500 border-white/5'}`;
+            setSize(window.state.selectedSize);
+        }
+
+        function setColor(m) {
+            window.state.colorMode = m;
+            ui.img.style.filter = m === 'bw' ? 'grayscale(1) contrast(1.1)' : 'none';
+            document.getElementById('btn-color').className = `py-3 text-[10px] font-black rounded-xl transition-all ${m === 'color' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`;
+            document.getElementById('btn-bw').className = `py-3 text-[10px] font-black rounded-xl transition-all ${m === 'bw' ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`;
+        }
+
+        // Simulación de Hardware
+        function connect(brand) {
+            ui.loaderMsg.innerText = `Enlazando con ${brand}...`;
+            ui.loader.classList.remove('hidden');
+            setTimeout(() => {
+                window.state.connectedDevice = brand;
+                ui.printer.innerText = `${brand} Activo`;
+                document.getElementById('device-pill').classList.remove('hidden');
+                ui.loader.classList.add('hidden');
+                notify(`${brand} Conectado correctamente`);
+            }, 1500);
+        }
+
+        async function processPrint() {
+            if(!window.state.connectedDevice) return notify("Error: No hay dispositivo conectado");
+            
+            ui.loaderMsg.innerText = "Optimizando para impresión...";
+            ui.loader.classList.remove('hidden');
+            
+            setTimeout(() => {
+                ui.loaderMsg.innerText = "Enviando trabajo a la nube...";
+                setTimeout(async () => {
+                    const job = {
+                        printer: window.state.connectedDevice,
+                        size: window.state.selectedSize,
+                        mode: window.state.colorMode,
+                        category: window.state.formatCategory,
+                        status: 'Completado'
+                    };
+                    await window.logPrintJob(job);
+                    ui.loader.classList.add('hidden');
+                    notify("TRABAJO ENVIADO AL DISPOSITIVO");
+                }, 2000);
+            }, 1500);
+        }
+
+        function notify(msg) {
+            ui.toast.innerText = msg;
+            ui.toast.classList.replace('opacity-0', 'opacity-100');
+            ui.toast.classList.replace('translate-y-10', 'translate-y-0');
+            setTimeout(() => {
+                ui.toast.classList.replace('opacity-100', 'opacity-0');
+                ui.toast.classList.replace('translate-y-0', 'translate-y-10');
+            }, 3000);
+        }
+
+        function renderHistory(data) {
+            if(!data.length) return;
+            ui.history.innerHTML = data.slice(0, 6).map(i => `
+                <div class="flex items-center justify-between p-5 bg-zinc-900/40 rounded-[1.5rem] border border-white/5">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-black flex items-center justify-center text-xs">
+                            <i class="fas ${i.category === 'cuadros' ? 'fa-image text-orange-500' : 'fa-receipt text-zinc-500'}"></i>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-tighter">${i.printer} - ${i.size}</p>
+                            <p class="text-[8px] text-zinc-600 font-bold uppercase">${i.mode === 'color' ? 'Full Color' : 'B&N Fine Art'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[7px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-md uppercase tracking-widest">Listo</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        updateSizeOptions();
+    </script>
+</body>
+</html>
+
